@@ -94,7 +94,7 @@ async function registerHelpCommand(): Promise<void> {
     instance: '.*', // Match all instances
     channel: '.*', // Match all channels
     user: '.*', // Match all users
-    regex: 'help', // Match help command with optional module name
+    regex: '^help\\s*', // Match help command at start of line with optional trailing whitespace
     platformPrefixAllowed: true,
     nickPrefixAllowed: true, // Nick prefix such that "eevee: help" triggers
     ratelimit: defaultRateLimit,
@@ -123,7 +123,7 @@ async function registerHelpCommand(): Promise<void> {
     instance: '.*', // Match all instances
     channel: '.*', // Match all channels
     user: '.*', // Match all users
-    regex: '[.!]bots', // Match both .bots and !bots commands
+    regex: '^[.!]bots\\s*$', // Match both .bots and !bots commands at start of line
     platformPrefixAllowed: false, // No platform prefix for !bots
     ratelimit: defaultRateLimit,
   };
@@ -154,7 +154,7 @@ async function registerHelpCommand(): Promise<void> {
     instance: '.*', // Match all instances
     channel: '.*', // Match all channels
     user: '.*', // Match all users
-    regex: 'bots', // Match bots command with platform prefix
+    regex: '^bots\\s*$', // Match bots command with platform prefix at start of line
     platformPrefixAllowed: true, // Allow platform prefix for bots
     ratelimit: defaultRateLimit,
   };
