@@ -19,7 +19,7 @@ const natsSubscriptions: Array<Promise<string | boolean>> = [];
 let helpRegistry: HelpRegistry | null = null;
 
 // Help command UUID and display name
-const helpCommandUUID = '4D8E2F5A-9C1B-4D3C-8E7F-1A2B3C4D5E6F';
+const helpCommandUUID = '4d8e2f5a-9c1b-4d3c-8e7f-1a2b3c4d5e6f';
 const helpCommandDisplayName = 'help';
 
 // Eevee help command UUID and display name
@@ -369,7 +369,7 @@ const helpCommandSub = nats.subscribe(
               helpResponse += '\n';
             });
           } else {
-            helpResponse = `No help found for module \`${moduleName}\`.`;
+            helpResponse = `No help found for module '${moduleName}'.`;
           }
         } else {
           // Get help for all modules
@@ -452,7 +452,7 @@ const eeveeHelpCommandSub = nats.subscribe(
               helpResponse += '\n';
             });
           } else {
-            helpResponse = `No help found for module \`${moduleName}\`.`;
+            helpResponse = `No help found for module '${moduleName}'.`;
           }
         } else {
           // Get help for all modules
@@ -663,6 +663,19 @@ const statsUptimeSub = nats.subscribe('stats.uptime', (_subject, message) => {
   }
 });
 natsSubscriptions.push(statsUptimeSub);
+
+// Request help updates from all modules at startup
+try {
+  await nats.publish('help.updateRequest', JSON.stringify({}));
+  log.info('Requested help updates from all modules at startup', {
+    producer: 'help',
+  });
+} catch (error) {
+  log.error('Failed to request help updates at startup', {
+    producer: 'help',
+    error: error,
+  });
+}
 
 log.info('Help module initialized', {
   producer: 'help',
