@@ -377,6 +377,8 @@ const helpCommandSub = nats.subscribe(
           const allHelp = helpRegistry.getActiveHelp();
           if (allHelp.length > 0) {
             helpResponse = 'Available modules with help:\n';
+            // Sort modules alphabetically by their name
+            allHelp.sort((a, b) => a.from.localeCompare(b.from));
             allHelp.forEach((help) => {
               helpResponse += `- ${help.from}\n`;
             });
@@ -460,6 +462,8 @@ const eeveeHelpCommandSub = nats.subscribe(
           const allHelp = helpRegistry.getActiveHelp();
           if (allHelp.length > 0) {
             helpResponse = 'Available modules with help:\n';
+            // Sort modules alphabetically by their name
+            allHelp.sort((a, b) => a.from.localeCompare(b.from));
             allHelp.forEach((help) => {
               helpResponse += `- ${help.from}\n`;
             });
