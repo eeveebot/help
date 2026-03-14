@@ -188,8 +188,9 @@ async function registerHelpCommand(): Promise<void> {
     instance: '.*', // Match all instances
     channel: '.*', // Match all channels
     user: '.*', // Match all users
-    regex: 'eevee: help', // Match eevee: help command
+    regex: 'help', // Match eevee: help command
     platformPrefixAllowed: false, // No platform prefix for eevee: help
+    nickPrefixAllowed: true, // Nick prefix such that "eevee: help" triggers
     ratelimit: defaultRateLimit,
   };
 
@@ -511,7 +512,8 @@ const botsCommandSub = nats.subscribe(
       });
 
       // Generate bots response with maintainer and URL
-      const botsResponse = `maintainer: goos | url: https://eevee.bot | help: "eevee: help"`;
+      const botNick = data.botNick || 'eevee';
+      const botsResponse = `maintainer: goos | url: https://eevee.bot | help: "${botNick}: help"`;
 
       // Send response
       const response = {
@@ -552,7 +554,8 @@ const botsWithPrefixCommandSub = nats.subscribe(
       });
 
       // Generate bots response with maintainer and URL
-      const botsResponse = `maintainer: goos | url: https://eevee.bot | help: "eevee: help"`;
+      const botNick = data.botNick || 'eevee';
+      const botsResponse = `maintainer: goos | url: https://eevee.bot | help: "${botNick}: help"`;
 
       // Send response
       const response = {
