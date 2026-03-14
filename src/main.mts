@@ -22,6 +22,14 @@ let helpRegistry: HelpRegistry | null = null;
 const helpCommandUUID = '4D8E2F5A-9C1B-4D3C-8E7F-1A2B3C4D5E6F';
 const helpCommandDisplayName = 'help';
 
+// Eevee help command UUID and display name
+const eeveeHelpCommandUUID = 'facf3e62-66cd-4712-b9ec-6345278c9ff0';
+const eeveeHelpCommandDisplayName = 'eevee-help';
+
+const botsRawCommandUUID = '8e43df99-8b28-4128-babb-25a81d368fce';
+const botsWithPrefixCommandUUID = '88fe186d-e631-4e2e-a1c9-6978d732902f';
+const botsCommandDisplayName = 'bots';
+
 interface HelpConfig {
   // Define help configuration properties here as needed
   [key: string]: unknown;
@@ -103,6 +111,99 @@ async function registerHelpCommand(): Promise<void> {
     });
   } catch (error) {
     log.error('Failed to register help command', {
+      producer: 'help',
+      error: error,
+    });
+  }
+
+  // Register bots command (without platform prefix)
+  const botsCommandRegistration = {
+    type: 'command.register',
+    commandUUID: botsRawCommandUUID,
+    commandDisplayName: botsCommandDisplayName,
+    platform: '.*', // Match all platforms
+    network: '.*', // Match all networks
+    instance: '.*', // Match all instances
+    channel: '.*', // Match all channels
+    user: '.*', // Match all users
+    regex: '[.!]bots', // Match both .bots and !bots commands
+    platformPrefixAllowed: false, // No platform prefix for !bots
+    ratelimit: defaultRateLimit,
+  };
+
+  try {
+    await nats.publish(
+      'command.register',
+      JSON.stringify(botsCommandRegistration)
+    );
+    log.info('Registered bots command with router', {
+      producer: 'help',
+      ratelimit: defaultRateLimit,
+    });
+  } catch (error) {
+    log.error('Failed to register bots command', {
+      producer: 'help',
+      error: error,
+    });
+  }
+
+  // Register bots command (with platform prefix)
+  const botsWithPrefixCommandRegistration = {
+    type: 'command.register',
+    commandUUID: botsWithPrefixCommandUUID,
+    commandDisplayName: botsCommandDisplayName,
+    platform: '.*', // Match all platforms
+    network: '.*', // Match all networks
+    instance: '.*', // Match all instances
+    channel: '.*', // Match all channels
+    user: '.*', // Match all users
+    regex: 'bots', // Match bots command with platform prefix
+    platformPrefixAllowed: true, // Allow platform prefix for bots
+    ratelimit: defaultRateLimit,
+  };
+
+  try {
+    await nats.publish(
+      'command.register',
+      JSON.stringify(botsWithPrefixCommandRegistration)
+    );
+    log.info('Registered bots command with platform prefix with router', {
+      producer: 'help',
+      ratelimit: defaultRateLimit,
+    });
+  } catch (error) {
+    log.error('Failed to register bots command with platform prefix', {
+      producer: 'help',
+      error: error,
+    });
+  }
+
+  // Register eevee: help command (without platform prefix)
+  const eeveeHelpCommandRegistration = {
+    type: 'command.register',
+    commandUUID: eeveeHelpCommandUUID,
+    commandDisplayName: eeveeHelpCommandDisplayName,
+    platform: '.*', // Match all platforms
+    network: '.*', // Match all networks
+    instance: '.*', // Match all instances
+    channel: '.*', // Match all channels
+    user: '.*', // Match all users
+    regex: 'eevee: help', // Match eevee: help command
+    platformPrefixAllowed: false, // No platform prefix for eevee: help
+    ratelimit: defaultRateLimit,
+  };
+
+  try {
+    await nats.publish(
+      'command.register',
+      JSON.stringify(eeveeHelpCommandRegistration)
+    );
+    log.info('Registered eevee: help command with router', {
+      producer: 'help',
+      ratelimit: defaultRateLimit,
+    });
+  } catch (error) {
+    log.error('Failed to register eevee: help command', {
       producer: 'help',
       error: error,
     });
@@ -311,6 +412,171 @@ const helpCommandSub = nats.subscribe(
 );
 natsSubscriptions.push(helpCommandSub);
 
+// Subscribe to eevee: help command execution messages
+const eeveeHelpCommandSub = nats.subscribe(
+  `command.execute.${eeveeHelpCommandUUID}`,
+  (_subject, message) => {
+    try {
+      const data = JSON.parse(message.string());
+      log.info('Received command.execute for eevee: help', {
+        producer: 'help',
+        platform: data.platform,
+        instance: data.instance,
+        channel: data.channel,
+        user: data.user,
+        originalText: data.originalText,
+      });
+
+      // Parse the module name from the command text
+      const args = data.text.trim().replace('eevee: ', '');
+      const moduleName = args ? args.toLowerCase() : null;
+
+      // Generate help response
+      let helpResponse = '';
+
+      if (helpRegistry) {
+        if (moduleName) {
+          // Get help for specific module
+          const moduleHelp = helpRegistry.getHelp(moduleName);
+          if (moduleHelp) {
+            helpResponse = `Help for \`${moduleName}\`:\n`;
+            moduleHelp.help.forEach((item) => {
+              helpResponse += `- \`${item.command}\`: ${item.descr}`;
+              if (item.params && item.params.length > 0) {
+                helpResponse += `\n  Parameters:`;
+                item.params.forEach((param) => {
+                  const required = param.required ? '(required)' : '(optional)';
+                  helpResponse += `\n    - ${param.param} ${required}: ${param.descr}`;
+                });
+              }
+              helpResponse += '\n';
+            });
+          } else {
+            helpResponse = `No help found for module \`${moduleName}\`.`;
+          }
+        } else {
+          // Get help for all modules
+          const allHelp = helpRegistry.getActiveHelp();
+          if (allHelp.length > 0) {
+            helpResponse = 'Available modules with help:\n';
+            allHelp.forEach((help) => {
+              helpResponse += `- ${help.from}\n`;
+            });
+            helpResponse +=
+              '\nUse `help <module>` to get help for a specific module.';
+          } else {
+            helpResponse = 'No help available at this time.';
+          }
+        }
+      } else {
+        helpResponse = 'Help system is not available.';
+      }
+
+      // Send response
+      const response = {
+        channel: data.channel,
+        network: data.network,
+        instance: data.instance,
+        platform: data.platform,
+        text: helpResponse,
+        trace: data.trace,
+        type: 'message.outgoing',
+      };
+
+      const outgoingTopic = `chat.message.outgoing.${data.platform}.${data.instance}.${data.channel}`;
+      void nats.publish(outgoingTopic, JSON.stringify(response));
+    } catch (error) {
+      log.error('Failed to process eevee: help command', {
+        producer: 'help',
+        error: error,
+      });
+    }
+  }
+);
+natsSubscriptions.push(eeveeHelpCommandSub);
+
+// Subscribe to bots command execution messages (raw command without platform prefix)
+const botsCommandSub = nats.subscribe(
+  `command.execute.${botsRawCommandUUID}`,
+  (_subject, message) => {
+    try {
+      const data = JSON.parse(message.string());
+      log.info('Received command.execute for bots', {
+        producer: 'help',
+        platform: data.platform,
+        instance: data.instance,
+        channel: data.channel,
+        user: data.user,
+        originalText: data.originalText,
+      });
+
+      // Generate bots response with maintainer and URL
+      const botsResponse = `maintainer: goos | url: https://eevee.bot | help: "eevee: help"`;
+
+      // Send response
+      const response = {
+        channel: data.channel,
+        network: data.network,
+        instance: data.instance,
+        platform: data.platform,
+        text: botsResponse,
+        trace: data.trace,
+        type: 'message.outgoing',
+      };
+
+      const outgoingTopic = `chat.message.outgoing.${data.platform}.${data.instance}.${data.channel}`;
+      void nats.publish(outgoingTopic, JSON.stringify(response));
+    } catch (error) {
+      log.error('Failed to process bots command', {
+        producer: 'help',
+        error: error,
+      });
+    }
+  }
+);
+natsSubscriptions.push(botsCommandSub);
+
+// Subscribe to bots command execution messages (with platform prefix)
+const botsWithPrefixCommandSub = nats.subscribe(
+  `command.execute.${botsWithPrefixCommandUUID}`,
+  (_subject, message) => {
+    try {
+      const data = JSON.parse(message.string());
+      log.info('Received command.execute for bots with platform prefix', {
+        producer: 'help',
+        platform: data.platform,
+        instance: data.instance,
+        channel: data.channel,
+        user: data.user,
+        originalText: data.originalText,
+      });
+
+      // Generate bots response with maintainer and URL
+      const botsResponse = `maintainer: goos | url: https://eevee.bot | help: "eevee: help"`;
+
+      // Send response
+      const response = {
+        channel: data.channel,
+        network: data.network,
+        instance: data.instance,
+        platform: data.platform,
+        text: botsResponse,
+        trace: data.trace,
+        type: 'message.outgoing',
+      };
+
+      const outgoingTopic = `chat.message.outgoing.${data.platform}.${data.instance}.${data.channel}`;
+      void nats.publish(outgoingTopic, JSON.stringify(response));
+    } catch (error) {
+      log.error('Failed to process bots command with platform prefix', {
+        producer: 'help',
+        error: error,
+      });
+    }
+  }
+);
+natsSubscriptions.push(botsWithPrefixCommandSub);
+
 // Subscribe to control messages for re-registering the help command
 const controlSubRegisterCommandHelp = nats.subscribe(
   `control.registerCommands.${helpCommandDisplayName}`,
@@ -325,6 +591,36 @@ const controlSubRegisterCommandHelp = nats.subscribe(
   }
 );
 natsSubscriptions.push(controlSubRegisterCommandHelp);
+
+// Subscribe to control messages for re-registering the eevee help command
+const controlSubRegisterCommandEeveeHelp = nats.subscribe(
+  `control.registerCommands.${eeveeHelpCommandDisplayName}`,
+  () => {
+    log.info(
+      `Received control.registerCommands.${eeveeHelpCommandDisplayName} control message`,
+      {
+        producer: 'help',
+      }
+    );
+    void registerHelpCommand();
+  }
+);
+natsSubscriptions.push(controlSubRegisterCommandEeveeHelp);
+
+// Subscribe to control messages for re-registering the bots command
+const controlSubRegisterCommandBots = nats.subscribe(
+  `control.registerCommands.${botsCommandDisplayName}`,
+  () => {
+    log.info(
+      `Received control.registerCommands.${botsCommandDisplayName} control message`,
+      {
+        producer: 'help',
+      }
+    );
+    void registerHelpCommand();
+  }
+);
+natsSubscriptions.push(controlSubRegisterCommandBots);
 
 const controlSubRegisterCommandAll = nats.subscribe(
   'control.registerCommands',
