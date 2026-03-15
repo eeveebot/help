@@ -1,6 +1,6 @@
 {
   "name": "@eeveebot/help",
-  "version": "2.2.12",
+  "version": "2.2.13",
   "description": "help module for eevee.bot",
   "main": "dist/main.mjs",
   "type": "module",
@@ -11,7 +11,7 @@
     "update-libraries": "ncu -u @eeveebot/libeevee js-yaml undici && npm install"
   },
   "dependencies": {
-    "@eeveebot/libeevee": "^3.6.0",
+    "@eeveebot/libeevee": "^3.6.2",
     "js-yaml": "^4.1.1"
   },
   "devDependencies": {
