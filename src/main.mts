@@ -221,8 +221,8 @@ const nats = new NatsClient({
 natsClients.push(nats);
 await nats.connect();
 
-// Initialize help registry with NATS client
-helpRegistry = new HelpRegistry(nats);
+// Initialize help registry
+helpRegistry = new HelpRegistry();
 
 // Register help command with the router
 await registerHelpCommand();
