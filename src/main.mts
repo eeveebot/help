@@ -9,8 +9,32 @@ import { NatsClient, log } from '@eeveebot/libeevee';
 import { HelpRegistry } from './lib/help-registry.mjs';
 import { HelpRegistration } from './types/help.mjs';
 
+// Import metrics
+import {
+  initializeSystemMetrics,
+  setupHttpServer,
+  register,
+} from '@eeveebot/libeevee';
+import {
+  recordHelpCommand,
+  recordBotsCommand,
+  recordHelpRegistryOperation,
+  recordNatsOperation,
+  recordProcessingTime,
+  recordError,
+} from './lib/metrics.mjs';
+
 // Record module startup time for uptime tracking
 const moduleStartTime = Date.now();
+
+// Initialize system metrics
+initializeSystemMetrics('help');
+
+// Setup HTTP server for metrics and health checks
+setupHttpServer({
+  port: process.env.HTTP_API_PORT || '9000',
+  serviceName: 'help',
+});
 
 const natsClients: InstanceType<typeof NatsClient>[] = [];
 const natsSubscriptions: Array<Promise<string | boolean>> = [];
@@ -102,6 +126,7 @@ async function registerHelpCommand(): Promise<void> {
 
   try {
     await nats.publish('command.register', JSON.stringify(commandRegistration));
+    recordNatsOperation('publish', 'command.register', 'success');
     log.info('Registered help command with router', {
       producer: 'help',
       ratelimit: defaultRateLimit,
@@ -111,6 +136,8 @@ async function registerHelpCommand(): Promise<void> {
       producer: 'help',
       error: error,
     });
+    recordNatsOperation('publish', 'command.register', 'error');
+    recordError('help_command_register');
   }
 
   // Register bots command (without platform prefix)
@@ -133,6 +160,7 @@ async function registerHelpCommand(): Promise<void> {
       'command.register',
       JSON.stringify(botsCommandRegistration)
     );
+    recordNatsOperation('publish', 'command.register', 'success');
     log.info('Registered bots command with router', {
       producer: 'help',
       ratelimit: defaultRateLimit,
@@ -142,6 +170,8 @@ async function registerHelpCommand(): Promise<void> {
       producer: 'help',
       error: error,
     });
+    recordNatsOperation('publish', 'command.register', 'error');
+    recordError('bots_command_register');
   }
 
   // Register bots command (with platform prefix)
@@ -164,6 +194,7 @@ async function registerHelpCommand(): Promise<void> {
       'command.register',
       JSON.stringify(botsWithPrefixCommandRegistration)
     );
+    recordNatsOperation('publish', 'command.register', 'success');
     log.info('Registered bots command with platform prefix with router', {
       producer: 'help',
       ratelimit: defaultRateLimit,
@@ -173,6 +204,8 @@ async function registerHelpCommand(): Promise<void> {
       producer: 'help',
       error: error,
     });
+    recordNatsOperation('publish', 'command.register', 'error');
+    recordError('bots_with_prefix_command_register');
   }
 }
 
@@ -231,7 +264,9 @@ await registerHelpCommand();
 loadHelpConfig();
 
 // Subscribe to help updates from other modules
-const helpUpdateSub = nats.subscribe('help.update', (_subject, message) => {
+const helpUpdateSub = nats.subscribe('help.update', (subject, message) => {
+  recordNatsOperation('subscribe', subject, 'success');
+  const startTime = Date.now();
   try {
     const data = JSON.parse(message.string()) as HelpRegistration;
     log.info('Received help.update message', {
@@ -241,18 +276,25 @@ const helpUpdateSub = nats.subscribe('help.update', (_subject, message) => {
 
     if (helpRegistry) {
       helpRegistry.registerHelp(data);
+      recordHelpRegistryOperation('register', 'success');
     }
   } catch (error) {
     log.error('Failed to process help.update message', {
       producer: 'help',
       error: error,
     });
+    recordHelpRegistryOperation('register', 'error');
+    recordError('help_update_process');
+  } finally {
+    const duration = Date.now() - startTime;
+    recordProcessingTime(duration / 1000); // Convert to seconds
   }
 });
 natsSubscriptions.push(helpUpdateSub);
 
 // Subscribe to help update requests
-const helpUpdateRequestSub = nats.subscribe('help.updateRequest', () => {
+const helpUpdateRequestSub = nats.subscribe('help.updateRequest', (subject) => {
+  recordNatsOperation('subscribe', subject, 'success');
   try {
     log.info('Received help.updateRequest message', {
       producer: 'help',
@@ -265,6 +307,7 @@ const helpUpdateRequestSub = nats.subscribe('help.updateRequest', () => {
       producer: 'help',
       error: error,
     });
+    recordError('help_update_request_process');
   }
 });
 natsSubscriptions.push(helpUpdateRequestSub);
@@ -273,6 +316,7 @@ natsSubscriptions.push(helpUpdateRequestSub);
 const helpUpdateRequestModuleSub = nats.subscribe(
   'help.updateRequest.*',
   (subject) => {
+    recordNatsOperation('subscribe', subject, 'success');
     try {
       const moduleName = subject.split('.').pop();
       log.info('Received module-specific help.updateRequest message', {
@@ -290,6 +334,7 @@ const helpUpdateRequestModuleSub = nats.subscribe(
           error: error,
         }
       );
+      recordError('module_specific_help_update_request_process');
     }
   }
 );
@@ -298,7 +343,9 @@ natsSubscriptions.push(helpUpdateRequestModuleSub);
 // Subscribe to help command execution messages
 const helpCommandSub = nats.subscribe(
   `command.execute.${helpCommandUUID}`,
-  (_subject, message) => {
+  (subject, message) => {
+    recordNatsOperation('subscribe', subject, 'success');
+    const startTime = Date.now();
     try {
       const data = JSON.parse(message.string());
       log.info('Received command.execute for help', {
@@ -370,11 +417,28 @@ const helpCommandSub = nats.subscribe(
 
       const outgoingTopic = `chat.message.outgoing.${data.platform}.${data.instance}.${data.channel}`;
       void nats.publish(outgoingTopic, JSON.stringify(response));
+      recordNatsOperation('publish', outgoingTopic, 'success');
+      
+      // Record successful command execution
+      recordHelpCommand(data.platform, data.network, data.channel, 'success');
     } catch (error) {
       log.error('Failed to process help command', {
         producer: 'help',
         error: error,
       });
+      
+      // Record failed command execution
+      if (typeof error === 'object' && error !== null && 'platform' in error && 'network' in error && 'channel' in error) {
+        // If we have the data, record with specific details
+        recordHelpCommand(error.platform, error.network, error.channel, 'error');
+      } else {
+        // Otherwise record with unknown details
+        recordHelpCommand('unknown', 'unknown', 'unknown', 'error');
+      }
+      recordError('help_command_process');
+    } finally {
+      const duration = Date.now() - startTime;
+      recordProcessingTime(duration / 1000); // Convert to seconds
     }
   }
 );
@@ -383,7 +447,9 @@ natsSubscriptions.push(helpCommandSub);
 // Subscribe to bots command execution messages (raw command without platform prefix)
 const botsCommandSub = nats.subscribe(
   `command.execute.${botsRawCommandUUID}`,
-  (_subject, message) => {
+  (subject, message) => {
+    recordNatsOperation('subscribe', subject, 'success');
+    const startTime = Date.now();
     try {
       const data = JSON.parse(message.string());
       log.info('Received command.execute for bots', {
@@ -412,11 +478,28 @@ const botsCommandSub = nats.subscribe(
 
       const outgoingTopic = `chat.message.outgoing.${data.platform}.${data.instance}.${data.channel}`;
       void nats.publish(outgoingTopic, JSON.stringify(response));
+      recordNatsOperation('publish', outgoingTopic, 'success');
+      
+      // Record successful command execution
+      recordBotsCommand(data.platform, data.network, data.channel, 'success');
     } catch (error) {
       log.error('Failed to process bots command', {
         producer: 'help',
         error: error,
       });
+      
+      // Record failed command execution
+      if (typeof error === 'object' && error !== null && 'platform' in error && 'network' in error && 'channel' in error) {
+        // If we have the data, record with specific details
+        recordBotsCommand(error.platform, error.network, error.channel, 'error');
+      } else {
+        // Otherwise record with unknown details
+        recordBotsCommand('unknown', 'unknown', 'unknown', 'error');
+      }
+      recordError('bots_command_process');
+    } finally {
+      const duration = Date.now() - startTime;
+      recordProcessingTime(duration / 1000); // Convert to seconds
     }
   }
 );
@@ -425,7 +508,9 @@ natsSubscriptions.push(botsCommandSub);
 // Subscribe to bots command execution messages (with platform prefix)
 const botsWithPrefixCommandSub = nats.subscribe(
   `command.execute.${botsWithPrefixCommandUUID}`,
-  (_subject, message) => {
+  (subject, message) => {
+    recordNatsOperation('subscribe', subject, 'success');
+    const startTime = Date.now();
     try {
       const data = JSON.parse(message.string());
       log.info('Received command.execute for bots with platform prefix', {
@@ -454,11 +539,28 @@ const botsWithPrefixCommandSub = nats.subscribe(
 
       const outgoingTopic = `chat.message.outgoing.${data.platform}.${data.instance}.${data.channel}`;
       void nats.publish(outgoingTopic, JSON.stringify(response));
+      recordNatsOperation('publish', outgoingTopic, 'success');
+      
+      // Record successful command execution
+      recordBotsCommand(data.platform, data.network, data.channel, 'success');
     } catch (error) {
       log.error('Failed to process bots command with platform prefix', {
         producer: 'help',
         error: error,
       });
+      
+      // Record failed command execution
+      if (typeof error === 'object' && error !== null && 'platform' in error && 'network' in error && 'channel' in error) {
+        // If we have the data, record with specific details
+        recordBotsCommand(error.platform, error.network, error.channel, 'error');
+      } else {
+        // Otherwise record with unknown details
+        recordBotsCommand('unknown', 'unknown', 'unknown', 'error');
+      }
+      recordError('bots_with_prefix_command_process');
+    } finally {
+      const duration = Date.now() - startTime;
+      recordProcessingTime(duration / 1000); // Convert to seconds
     }
   }
 );
@@ -467,7 +569,8 @@ natsSubscriptions.push(botsWithPrefixCommandSub);
 // Subscribe to control messages for re-registering the help command
 const controlSubRegisterCommandHelp = nats.subscribe(
   `control.registerCommands.${helpCommandDisplayName}`,
-  () => {
+  (subject) => {
+    recordNatsOperation('subscribe', subject, 'success');
     log.info(
       `Received control.registerCommands.${helpCommandDisplayName} control message`,
       {
@@ -482,7 +585,8 @@ natsSubscriptions.push(controlSubRegisterCommandHelp);
 // Subscribe to control messages for re-registering the bots command
 const controlSubRegisterCommandBots = nats.subscribe(
   `control.registerCommands.${botsCommandDisplayName}`,
-  () => {
+  (subject) => {
+    recordNatsOperation('subscribe', subject, 'success');
     log.info(
       `Received control.registerCommands.${botsCommandDisplayName} control message`,
       {
@@ -496,7 +600,8 @@ natsSubscriptions.push(controlSubRegisterCommandBots);
 
 const controlSubRegisterCommandAll = nats.subscribe(
   'control.registerCommands',
-  () => {
+  (subject) => {
+    recordNatsOperation('subscribe', subject, 'success');
     log.info('Received control.registerCommands control message', {
       producer: 'help',
     });
@@ -506,7 +611,8 @@ const controlSubRegisterCommandAll = nats.subscribe(
 natsSubscriptions.push(controlSubRegisterCommandAll);
 
 // Subscribe to stats.uptime messages and respond with module uptime
-const statsUptimeSub = nats.subscribe('stats.uptime', (_subject, message) => {
+const statsUptimeSub = nats.subscribe('stats.uptime', (subject, message) => {
+  recordNatsOperation('subscribe', subject, 'success');
   try {
     const data = JSON.parse(message.string());
     log.info('Received stats.uptime request', {
@@ -526,19 +632,81 @@ const statsUptimeSub = nats.subscribe('stats.uptime', (_subject, message) => {
 
     if (data.replyChannel) {
       void nats.publish(data.replyChannel, JSON.stringify(uptimeResponse));
+      recordNatsOperation('publish', data.replyChannel, 'success');
     }
   } catch (error) {
     log.error('Failed to process stats.uptime request', {
       producer: 'help',
       error: error,
     });
+    recordError('stats_uptime_process');
   }
 });
 natsSubscriptions.push(statsUptimeSub);
 
+// Subscribe to stats.emit.request messages and respond with full module stats
+const statsEmitRequestSub = nats.subscribe(
+  'stats.emit.request',
+  (subject, message) => {
+    recordNatsOperation('subscribe', subject, 'success');
+    try {
+      const data = JSON.parse(message.string());
+      log.info('Received stats.emit.request', {
+        producer: 'help',
+        replyChannel: data.replyChannel,
+      });
+
+      // Calculate uptime in milliseconds
+      const uptime = Date.now() - moduleStartTime;
+
+      // Get all prom-client metrics
+      void register
+        .metrics()
+        .then((prometheusMetrics) => {
+          // Get memory usage information
+          const memoryUsage = process.memoryUsage();
+
+          // Send stats back via the ephemeral reply channel
+          const statsResponse = {
+            module: 'help',
+            stats: {
+              uptime_seconds: Math.floor(uptime / 1000),
+              uptime_formatted: `${Math.floor(uptime / 86400000)}d ${Math.floor((uptime % 86400000) / 3600000)}h ${Math.floor((uptime % 3600000) / 60000)}m ${Math.floor((uptime % 60000) / 1000)}s`,
+              memory_rss_mb: Math.round(memoryUsage.rss / (1024 * 1024)),
+              memory_heap_used_mb: Math.round(
+                memoryUsage.heapUsed / (1024 * 1024)
+              ),
+              prometheus_metrics: prometheusMetrics,
+            },
+          };
+
+          if (data.replyChannel) {
+            void nats.publish(data.replyChannel, JSON.stringify(statsResponse));
+            recordNatsOperation('publish', data.replyChannel, 'success');
+          }
+        })
+        .catch((error) => {
+          log.error('Failed to collect prometheus metrics', {
+            producer: 'help',
+            error: error,
+          });
+          recordError('prometheus_metrics_collection');
+        });
+    } catch (error) {
+      log.error('Failed to process stats.emit.request', {
+        producer: 'help',
+        error: error,
+      });
+      recordError('stats_emit_request_process');
+    }
+  }
+);
+natsSubscriptions.push(statsEmitRequestSub);
+
 // Request help updates from all modules at startup
 try {
   await nats.publish('help.updateRequest', JSON.stringify({}));
+  recordNatsOperation('publish', 'help.updateRequest', 'success');
   log.info('Requested help updates from all modules at startup', {
     producer: 'help',
   });
@@ -547,6 +715,8 @@ try {
     producer: 'help',
     error: error,
   });
+  recordNatsOperation('publish', 'help.updateRequest', 'error');
+  recordError('help_updates_request_at_startup');
 }
 
 log.info('Help module initialized', {
