@@ -10,11 +10,9 @@ import {
   registerGracefulShutdown,
   createModuleMetrics,
   loadModuleConfig,
-  RateLimitConfig,
   defaultRateLimit,
   initializeSystemMetrics,
   setupHttpServer,
-  register,
   registerCommand,
   sendChatMessage,
   registerStatsHandlers
