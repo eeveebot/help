@@ -1,6 +1,6 @@
 {
   "name": "@eeveebot/help",
-  "version": "2.3.2",
+  "version": "2.4.0",
   "description": "help module for eevee.bot",
   "main": "dist/main.mjs",
   "type": "module",
@@ -8,15 +8,14 @@
     "build": "npm run test && tsc",
     "dev": "tsc --watch & node --loader ts-node/esm src/main.mts",
     "test": "eslint src/",
-    "update-libraries": "ncu -u @eeveebot/libeevee js-yaml undici && npm install"
+    "update-libraries": "ncu -u @eeveebot/libeevee undici && npm install"
   },
   "dependencies": {
-    "@eeveebot/libeevee": "^3.7.0",
-    "js-yaml": "^4.1.1"
+    "@eeveebot/libeevee": "^4.0.0"
+
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
-    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.19.37",
     "@typescript-eslint/eslint-plugin": "^8.57.0",
     "@typescript-eslint/parser": "^8.57.0",

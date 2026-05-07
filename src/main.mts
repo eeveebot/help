@@ -3,26 +3,35 @@
 // Help module
 // provides help information for commands across the system
 
-import fs from 'node:fs';
-import yaml from 'js-yaml';
-import { NatsClient, log } from '@eeveebot/libeevee';
-import { HelpRegistry } from './lib/help-registry.mjs';
-import { HelpRegistration } from './types/help.mjs';
-
-// Import metrics
 import {
+  NatsClient,
+  log,
+  createNatsConnection,
+  registerGracefulShutdown,
+  createModuleMetrics,
+  loadModuleConfig,
+  RateLimitConfig,
+  defaultRateLimit,
   initializeSystemMetrics,
   setupHttpServer,
   register,
+  registerCommand,
+  sendChatMessage,
+  registerStatsHandlers
 } from '@eeveebot/libeevee';
+import { HelpRegistry } from './lib/help-registry.mjs';
+import { HelpRegistration } from './types/help.mjs';
+
+// Import module-specific metrics
 import {
   recordHelpCommand,
   recordBotsCommand,
   recordHelpRegistryOperation,
-  recordNatsOperation,
   recordProcessingTime,
   recordError,
 } from './lib/metrics.mjs';
+
+const metrics = createModuleMetrics('help');
 
 // Record module startup time for uptime tracking
 const moduleStartTime = Date.now();
@@ -55,217 +64,59 @@ interface HelpConfig {
   [key: string]: unknown;
 }
 
-interface RateLimitConfig {
-  mode: 'enqueue' | 'drop';
-  level: 'channel' | 'user' | 'global';
-  limit: number;
-  interval: string; // e.g., "30s", "1m", "5m"
-}
-
-/**
- * Load help configuration from YAML file
- * @returns Help configuration parsed from YAML file
- */
-function loadHelpConfig(): HelpConfig {
-  // Get the config file path from environment variable
-  const configPath = process.env.MODULE_CONFIG_PATH;
-  if (!configPath) {
-    log.warn('MODULE_CONFIG_PATH not set, using default config', {
-      producer: 'help',
-    });
-    return {};
-  }
-
-  try {
-    // Read the YAML file
-    const configFile = fs.readFileSync(configPath, 'utf8');
-
-    // Parse the YAML content
-    const config = yaml.load(configFile) as HelpConfig;
-
-    log.info('Loaded help configuration', {
-      producer: 'help',
-      configPath,
-    });
-
-    return config;
-  } catch (error) {
-    log.error('Failed to load help configuration, using defaults', {
-      producer: 'help',
-      configPath,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return {};
-  }
-}
-
-// Function to register the help command with the router
-async function registerHelpCommand(): Promise<void> {
-  // Default rate limit configuration
-  const defaultRateLimit: RateLimitConfig = {
-    mode: 'drop',
-    level: 'user',
-    limit: 10,
-    interval: '1m',
-  };
-
-  const commandRegistration = {
-    type: 'command.register',
-    commandUUID: helpCommandUUID,
-    commandDisplayName: helpCommandDisplayName,
-    platform: '.*', // Match all platforms
-    network: '.*', // Match all networks
-    instance: '.*', // Match all instances
-    channel: '.*', // Match all channels
-    user: '.*', // Match all users
-    regex: '^help\\s*', // Match help command at start of line with optional trailing whitespace
-    platformPrefixAllowed: true,
-    nickPrefixAllowed: true, // Nick prefix such that "eevee: help" triggers
-    ratelimit: defaultRateLimit,
-  };
-
-  try {
-    await nats.publish('command.register', JSON.stringify(commandRegistration));
-    recordNatsOperation('publish', 'command.register', 'success');
-    log.info('Registered help command with router', {
-      producer: 'help',
-      ratelimit: defaultRateLimit,
-    });
-  } catch (error) {
-    log.error('Failed to register help command', {
-      producer: 'help',
-      error: error,
-    });
-    recordNatsOperation('publish', 'command.register', 'error');
-    recordError('help_command_register');
-  }
-
-  // Register bots command (without platform prefix)
-  const botsCommandRegistration = {
-    type: 'command.register',
-    commandUUID: botsRawCommandUUID,
-    commandDisplayName: botsCommandDisplayName,
-    platform: '.*', // Match all platforms
-    network: '.*', // Match all networks
-    instance: '.*', // Match all instances
-    channel: '.*', // Match all channels
-    user: '.*', // Match all users
-    regex: '^[.!]bots\\s*$', // Match both .bots and !bots commands at start of line
-    platformPrefixAllowed: false, // No platform prefix for !bots
-    ratelimit: defaultRateLimit,
-  };
-
-  try {
-    await nats.publish(
-      'command.register',
-      JSON.stringify(botsCommandRegistration)
-    );
-    recordNatsOperation('publish', 'command.register', 'success');
-    log.info('Registered bots command with router', {
-      producer: 'help',
-      ratelimit: defaultRateLimit,
-    });
-  } catch (error) {
-    log.error('Failed to register bots command', {
-      producer: 'help',
-      error: error,
-    });
-    recordNatsOperation('publish', 'command.register', 'error');
-    recordError('bots_command_register');
-  }
-
-  // Register bots command (with platform prefix)
-  const botsWithPrefixCommandRegistration = {
-    type: 'command.register',
-    commandUUID: botsWithPrefixCommandUUID,
-    commandDisplayName: botsCommandDisplayName,
-    platform: '.*', // Match all platforms
-    network: '.*', // Match all networks
-    instance: '.*', // Match all instances
-    channel: '.*', // Match all channels
-    user: '.*', // Match all users
-    regex: '^bots\\s*$', // Match bots command with platform prefix at start of line
-    platformPrefixAllowed: true, // Allow platform prefix for bots
-    ratelimit: defaultRateLimit,
-  };
-
-  try {
-    await nats.publish(
-      'command.register',
-      JSON.stringify(botsWithPrefixCommandRegistration)
-    );
-    recordNatsOperation('publish', 'command.register', 'success');
-    log.info('Registered bots command with platform prefix with router', {
-      producer: 'help',
-      ratelimit: defaultRateLimit,
-    });
-  } catch (error) {
-    log.error('Failed to register bots command with platform prefix', {
-      producer: 'help',
-      error: error,
-    });
-    recordNatsOperation('publish', 'command.register', 'error');
-    recordError('bots_with_prefix_command_register');
-  }
-}
+// Register commands using libeevee registerCommand helper
+// registerCommand handles command.register publish + control.registerCommands subscriptions automatically
 
 //
-// Do whatever teardown is necessary before calling common handler
-process.on('SIGINT', () => {
-  natsClients.forEach((natsClient) => {
-    void natsClient.drain();
-  });
-
-  if (helpRegistry) {
-    helpRegistry.destroy();
-  }
-});
-
-process.on('SIGTERM', () => {
-  natsClients.forEach((natsClient) => {
-    void natsClient.drain();
-  });
-
-  if (helpRegistry) {
-    helpRegistry.destroy();
-  }
+// Register graceful shutdown
+registerGracefulShutdown(natsClients, async () => {
+  if (helpRegistry) helpRegistry.destroy();
 });
 
 //
 // Setup NATS connection
-
-// Get host and token
-const natsHost = process.env.NATS_HOST || false;
-if (!natsHost) {
-  const msg = 'environment variable NATS_HOST is not set.';
-  throw new Error(msg);
-}
-
-const natsToken = process.env.NATS_TOKEN || false;
-if (!natsToken) {
-  const msg = 'environment variable NATS_TOKEN is not set.';
-  throw new Error(msg);
-}
-
-const nats = new NatsClient({
-  natsHost: natsHost as string,
-  natsToken: natsToken as string,
-});
+const nats = await createNatsConnection();
 natsClients.push(nats);
-await nats.connect();
 
 // Initialize help registry
 helpRegistry = new HelpRegistry();
 
 // Register help command with the router
-await registerHelpCommand();
+const helpCmdSubs = await registerCommand(nats, {
+  commandUUID: helpCommandUUID,
+  commandDisplayName: helpCommandDisplayName,
+  regex: '^help\\s*',
+  platformPrefixAllowed: true,
+  ratelimit: defaultRateLimit,
+}, metrics);
+natsSubscriptions.push(...helpCmdSubs);
+
+// Register bots command (raw, no platform prefix)
+const botsCmdSubs = await registerCommand(nats, {
+  commandUUID: botsRawCommandUUID,
+  commandDisplayName: botsCommandDisplayName,
+  regex: '^[.!]bots\\s*$',
+  platformPrefixAllowed: false,
+  ratelimit: defaultRateLimit,
+}, metrics);
+natsSubscriptions.push(...botsCmdSubs);
+
+// Register bots command (with platform prefix)
+const botsWithPrefixCmdSubs = await registerCommand(nats, {
+  commandUUID: botsWithPrefixCommandUUID,
+  commandDisplayName: botsCommandDisplayName,
+  regex: '^bots\\s*$',
+  platformPrefixAllowed: true,
+  ratelimit: defaultRateLimit,
+}, metrics);
+natsSubscriptions.push(...botsWithPrefixCmdSubs);
 
 // Load configuration at startup
-loadHelpConfig();
+loadModuleConfig<HelpConfig>({});
 
 // Subscribe to help updates from other modules
 const helpUpdateSub = nats.subscribe('help.update', (subject, message) => {
-  recordNatsOperation('subscribe', subject, 'success');
+  metrics.recordNatsSubscribe(subject);
   const startTime = Date.now();
   try {
     const data = JSON.parse(message.string()) as HelpRegistration;
@@ -294,7 +145,7 @@ natsSubscriptions.push(helpUpdateSub);
 
 // Subscribe to help update requests
 const helpUpdateRequestSub = nats.subscribe('help.updateRequest', (subject) => {
-  recordNatsOperation('subscribe', subject, 'success');
+  metrics.recordNatsSubscribe(subject);
   try {
     log.info('Received help.updateRequest message', {
       producer: 'help',
@@ -316,7 +167,7 @@ natsSubscriptions.push(helpUpdateRequestSub);
 const helpUpdateRequestModuleSub = nats.subscribe(
   'help.updateRequest.*',
   (subject) => {
-    recordNatsOperation('subscribe', subject, 'success');
+    metrics.recordNatsSubscribe(subject);
     try {
       const moduleName = subject.split('.').pop();
       log.info('Received module-specific help.updateRequest message', {
@@ -344,7 +195,7 @@ natsSubscriptions.push(helpUpdateRequestModuleSub);
 const helpCommandSub = nats.subscribe(
   `command.execute.${helpCommandUUID}`,
   (subject, message) => {
-    recordNatsOperation('subscribe', subject, 'success');
+    metrics.recordNatsSubscribe(subject);
     const startTime = Date.now();
     try {
       const data = JSON.parse(message.string());
@@ -405,19 +256,14 @@ const helpCommandSub = nats.subscribe(
       }
 
       // Send response
-      const response = {
+      await sendChatMessage(nats, {
         channel: data.channel,
         network: data.network,
         instance: data.instance,
         platform: data.platform,
         text: helpResponse,
         trace: data.trace,
-        type: 'message.outgoing',
-      };
-
-      const outgoingTopic = `chat.message.outgoing.${data.platform}.${data.instance}.${data.channel}`;
-      void nats.publish(outgoingTopic, JSON.stringify(response));
-      recordNatsOperation('publish', outgoingTopic, 'success');
+      }, metrics);
       
       // Record successful command execution
       recordHelpCommand(data.platform, data.network, data.channel, 'success');
@@ -448,7 +294,7 @@ natsSubscriptions.push(helpCommandSub);
 const botsCommandSub = nats.subscribe(
   `command.execute.${botsRawCommandUUID}`,
   (subject, message) => {
-    recordNatsOperation('subscribe', subject, 'success');
+    metrics.recordNatsSubscribe(subject);
     const startTime = Date.now();
     try {
       const data = JSON.parse(message.string());
@@ -466,19 +312,14 @@ const botsCommandSub = nats.subscribe(
       const botsResponse = `maintainer: goos | url: https://eevee.bot | help: "${botNick}: help"`;
 
       // Send response
-      const response = {
+      await sendChatMessage(nats, {
         channel: data.channel,
         network: data.network,
         instance: data.instance,
         platform: data.platform,
         text: botsResponse,
         trace: data.trace,
-        type: 'message.outgoing',
-      };
-
-      const outgoingTopic = `chat.message.outgoing.${data.platform}.${data.instance}.${data.channel}`;
-      void nats.publish(outgoingTopic, JSON.stringify(response));
-      recordNatsOperation('publish', outgoingTopic, 'success');
+      }, metrics);
       
       // Record successful command execution
       recordBotsCommand(data.platform, data.network, data.channel, 'success');
@@ -509,7 +350,7 @@ natsSubscriptions.push(botsCommandSub);
 const botsWithPrefixCommandSub = nats.subscribe(
   `command.execute.${botsWithPrefixCommandUUID}`,
   (subject, message) => {
-    recordNatsOperation('subscribe', subject, 'success');
+    metrics.recordNatsSubscribe(subject);
     const startTime = Date.now();
     try {
       const data = JSON.parse(message.string());
@@ -527,19 +368,14 @@ const botsWithPrefixCommandSub = nats.subscribe(
       const botsResponse = `maintainer: goos | url: https://eevee.bot | help: "${botNick}: help"`;
 
       // Send response
-      const response = {
+      await sendChatMessage(nats, {
         channel: data.channel,
         network: data.network,
         instance: data.instance,
         platform: data.platform,
         text: botsResponse,
         trace: data.trace,
-        type: 'message.outgoing',
-      };
-
-      const outgoingTopic = `chat.message.outgoing.${data.platform}.${data.instance}.${data.channel}`;
-      void nats.publish(outgoingTopic, JSON.stringify(response));
-      recordNatsOperation('publish', outgoingTopic, 'success');
+      }, metrics);
       
       // Record successful command execution
       recordBotsCommand(data.platform, data.network, data.channel, 'success');
@@ -566,147 +402,16 @@ const botsWithPrefixCommandSub = nats.subscribe(
 );
 natsSubscriptions.push(botsWithPrefixCommandSub);
 
-// Subscribe to control messages for re-registering the help command
-const controlSubRegisterCommandHelp = nats.subscribe(
-  `control.registerCommands.${helpCommandDisplayName}`,
-  (subject) => {
-    recordNatsOperation('subscribe', subject, 'success');
-    log.info(
-      `Received control.registerCommands.${helpCommandDisplayName} control message`,
-      {
-        producer: 'help',
-      }
-    );
-    void registerHelpCommand();
-  }
-);
-natsSubscriptions.push(controlSubRegisterCommandHelp);
+// control.registerCommands subscriptions are now handled by registerCommand() autoControlSub
 
-// Subscribe to control messages for re-registering the bots command
-const controlSubRegisterCommandBots = nats.subscribe(
-  `control.registerCommands.${botsCommandDisplayName}`,
-  (subject) => {
-    recordNatsOperation('subscribe', subject, 'success');
-    log.info(
-      `Received control.registerCommands.${botsCommandDisplayName} control message`,
-      {
-        producer: 'help',
-      }
-    );
-    void registerHelpCommand();
-  }
-);
-natsSubscriptions.push(controlSubRegisterCommandBots);
-
-const controlSubRegisterCommandAll = nats.subscribe(
-  'control.registerCommands',
-  (subject) => {
-    recordNatsOperation('subscribe', subject, 'success');
-    log.info('Received control.registerCommands control message', {
-      producer: 'help',
-    });
-    void registerHelpCommand();
-  }
-);
-natsSubscriptions.push(controlSubRegisterCommandAll);
-
-// Subscribe to stats.uptime messages and respond with module uptime
-const statsUptimeSub = nats.subscribe('stats.uptime', (subject, message) => {
-  recordNatsOperation('subscribe', subject, 'success');
-  try {
-    const data = JSON.parse(message.string());
-    log.info('Received stats.uptime request', {
-      producer: 'help',
-      replyChannel: data.replyChannel,
-    });
-
-    // Calculate uptime in milliseconds
-    const uptime = Date.now() - moduleStartTime;
-
-    // Send uptime back via the ephemeral reply channel
-    const uptimeResponse = {
-      module: 'help',
-      uptime: uptime,
-      uptimeFormatted: `${Math.floor(uptime / 86400000)}d ${Math.floor((uptime % 86400000) / 3600000)}h ${Math.floor((uptime % 3600000) / 60000)}m ${Math.floor((uptime % 60000) / 1000)}s`,
-    };
-
-    if (data.replyChannel) {
-      void nats.publish(data.replyChannel, JSON.stringify(uptimeResponse));
-      recordNatsOperation('publish', data.replyChannel, 'success');
-    }
-  } catch (error) {
-    log.error('Failed to process stats.uptime request', {
-      producer: 'help',
-      error: error,
-    });
-    recordError('stats_uptime_process');
-  }
-});
-natsSubscriptions.push(statsUptimeSub);
-
-// Subscribe to stats.emit.request messages and respond with full module stats
-const statsEmitRequestSub = nats.subscribe(
-  'stats.emit.request',
-  (subject, message) => {
-    recordNatsOperation('subscribe', subject, 'success');
-    try {
-      const data = JSON.parse(message.string());
-      log.info('Received stats.emit.request', {
-        producer: 'help',
-        replyChannel: data.replyChannel,
-      });
-
-      // Calculate uptime in milliseconds
-      const uptime = Date.now() - moduleStartTime;
-
-      // Get all prom-client metrics
-      void register
-        .metrics()
-        .then((prometheusMetrics) => {
-          // Get memory usage information
-          const memoryUsage = process.memoryUsage();
-
-          // Send stats back via the ephemeral reply channel
-          const statsResponse = {
-            module: 'help',
-            stats: {
-              uptime_seconds: Math.floor(uptime / 1000),
-              uptime_formatted: `${Math.floor(uptime / 86400000)}d ${Math.floor((uptime % 86400000) / 3600000)}h ${Math.floor((uptime % 3600000) / 60000)}m ${Math.floor((uptime % 60000) / 1000)}s`,
-              memory_rss_mb: Math.round(memoryUsage.rss / (1024 * 1024)),
-              memory_heap_used_mb: Math.round(
-                memoryUsage.heapUsed / (1024 * 1024)
-              ),
-              prometheus_metrics: prometheusMetrics,
-            },
-          };
-
-          if (data.replyChannel) {
-            void nats.publish(data.replyChannel, JSON.stringify(statsResponse));
-            recordNatsOperation('publish', data.replyChannel, 'success');
-          }
-        })
-        .catch((error) => {
-          log.error('Failed to collect prometheus metrics', {
-            producer: 'help',
-            error: error,
-          });
-          recordError('prometheus_metrics_collection');
-        });
-    } catch (error) {
-      log.error('Failed to process stats.emit.request', {
-        producer: 'help',
-        error: error,
-      });
-      recordError('stats_emit_request_process');
-    }
-  }
-);
-natsSubscriptions.push(statsEmitRequestSub);
+// Subscribe to stats.uptime and stats.emit.request
+const statsSubs = registerStatsHandlers({ nats, moduleName: 'help', startTime: moduleStartTime, metrics });
+natsSubscriptions.push(...statsSubs);
 
 // Request help updates from all modules at startup
 try {
   await nats.publish('help.updateRequest', JSON.stringify({}));
-  recordNatsOperation('publish', 'help.updateRequest', 'success');
+  metrics.recordNatsPublish('help.updateRequest');
   log.info('Requested help updates from all modules at startup', {
     producer: 'help',
   });
@@ -715,7 +420,7 @@ try {
     producer: 'help',
     error: error,
   });
-  recordNatsOperation('publish', 'help.updateRequest', 'error');
+  metrics.recordNatsPublish('help.updateRequest');
   recordError('help_updates_request_at_startup');
 }
 
