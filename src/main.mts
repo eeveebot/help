@@ -192,7 +192,7 @@ natsSubscriptions.push(helpUpdateRequestModuleSub);
 // Subscribe to help command execution messages
 const helpCommandSub = nats.subscribe(
   `command.execute.${helpCommandUUID}`,
-  (subject, message) => {
+  async (subject, message) => {
     metrics.recordNatsSubscribe(subject);
     const startTime = Date.now();
     try {
@@ -291,7 +291,7 @@ natsSubscriptions.push(helpCommandSub);
 // Subscribe to bots command execution messages (raw command without platform prefix)
 const botsCommandSub = nats.subscribe(
   `command.execute.${botsRawCommandUUID}`,
-  (subject, message) => {
+  async (subject, message) => {
     metrics.recordNatsSubscribe(subject);
     const startTime = Date.now();
     try {
@@ -347,7 +347,7 @@ natsSubscriptions.push(botsCommandSub);
 // Subscribe to bots command execution messages (with platform prefix)
 const botsWithPrefixCommandSub = nats.subscribe(
   `command.execute.${botsWithPrefixCommandUUID}`,
-  (subject, message) => {
+  async (subject, message) => {
     metrics.recordNatsSubscribe(subject);
     const startTime = Date.now();
     try {
