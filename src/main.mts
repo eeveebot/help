@@ -37,14 +37,16 @@ const moduleStartTime = Date.now();
 // Initialize system metrics
 initializeSystemMetrics('help');
 
+
+
+const natsClients: InstanceType<typeof NatsClient>[] = [];
+
 // Setup HTTP server for metrics and health checks
 setupHttpServer({
   port: process.env.HTTP_API_PORT || '9000',
   serviceName: 'help',
   natsClients: natsClients,
 });
-
-const natsClients: InstanceType<typeof NatsClient>[] = [];
 const natsSubscriptions: Array<Promise<string | boolean>> = [];
 
 // Initialize help registry
