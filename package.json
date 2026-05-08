@@ -1,6 +1,6 @@
 {
   "name": "@eeveebot/help",
-  "version": "2.4.3",
+  "version": "2.4.4",
   "description": "help module for eevee.bot",
   "main": "dist/main.mjs",
   "type": "module",

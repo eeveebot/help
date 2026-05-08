@@ -10,6 +10,7 @@ import {
   registerGracefulShutdown,
   createModuleMetrics,
   loadModuleConfig,
+  RateLimitConfig,
   defaultRateLimit,
   initializeSystemMetrics,
   setupHttpServer,
@@ -61,8 +62,7 @@ const botsWithPrefixCommandUUID = '88fe186d-e631-4e2e-a1c9-6978d732902f';
 const botsCommandDisplayName = 'bots';
 
 interface HelpConfig {
-  // Define help configuration properties here as needed
-  [key: string]: unknown;
+  ratelimit?: RateLimitConfig;
 }
 
 // Register commands using libeevee registerCommand helper
@@ -79,6 +79,10 @@ registerGracefulShutdown(natsClients, async () => {
 const nats = await createNatsConnection();
 natsClients.push(nats);
 
+// Load configuration at startup
+const helpConfig = loadModuleConfig<HelpConfig>({});
+const rateLimitConfig = helpConfig.ratelimit || defaultRateLimit;
+
 // Initialize help registry
 helpRegistry = new HelpRegistry();
 
@@ -88,7 +92,7 @@ const helpCmdSubs = await registerCommand(nats, {
   commandDisplayName: helpCommandDisplayName,
   regex: '^help\\s*',
   platformPrefixAllowed: true,
-  ratelimit: defaultRateLimit,
+  ratelimit: rateLimitConfig,
 }, metrics);
 natsSubscriptions.push(...helpCmdSubs);
 
@@ -98,7 +102,7 @@ const botsCmdSubs = await registerCommand(nats, {
   commandDisplayName: botsCommandDisplayName,
   regex: '^[.!]bots\\s*$',
   platformPrefixAllowed: false,
-  ratelimit: defaultRateLimit,
+  ratelimit: rateLimitConfig,
 }, metrics);
 natsSubscriptions.push(...botsCmdSubs);
 
@@ -108,12 +112,11 @@ const botsWithPrefixCmdSubs = await registerCommand(nats, {
   commandDisplayName: botsCommandDisplayName,
   regex: '^bots\\s*$',
   platformPrefixAllowed: true,
-  ratelimit: defaultRateLimit,
+  ratelimit: rateLimitConfig,
 }, metrics);
 natsSubscriptions.push(...botsWithPrefixCmdSubs);
 
 // Load configuration at startup
-loadModuleConfig<HelpConfig>({});
 
 // Subscribe to help updates from other modules
 const helpUpdateSub = nats.subscribe('help.update', (subject, message) => {
