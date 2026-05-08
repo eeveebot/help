@@ -41,6 +41,7 @@ initializeSystemMetrics('help');
 setupHttpServer({
   port: process.env.HTTP_API_PORT || '9000',
   serviceName: 'help',
+  natsClients: natsClients,
 });
 
 const natsClients: InstanceType<typeof NatsClient>[] = [];
