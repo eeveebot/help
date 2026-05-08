@@ -92,6 +92,7 @@ const helpCmdSubs = await registerCommand(nats, {
   commandDisplayName: helpCommandDisplayName,
   regex: '^help\\s*',
   platformPrefixAllowed: true,
+  nickPrefixAllowed: true,
   ratelimit: rateLimitConfig,
 }, metrics);
 natsSubscriptions.push(...helpCmdSubs);
