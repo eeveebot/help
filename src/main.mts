@@ -121,7 +121,7 @@ natsSubscriptions.push(...botsWithPrefixCmdSubs);
 // Load configuration at startup
 
 // Subscribe to help updates from other modules
-const helpUpdateSub = nats.subscribe('help.update', (subject, message) => {
+const helpUpdateSub = nats.subscribe('help.update', (subject: string, message: Nats.Msg) => {
   metrics.recordNatsSubscribe(subject);
   const startTime = Date.now();
   try {
@@ -150,7 +150,7 @@ const helpUpdateSub = nats.subscribe('help.update', (subject, message) => {
 natsSubscriptions.push(helpUpdateSub);
 
 // Subscribe to help removal messages
-const helpRemoveSub = nats.subscribe('help.remove', (subject, message) => {
+const helpRemoveSub = nats.subscribe('help.remove', (subject: string, message: Nats.Msg) => {
   metrics.recordNatsSubscribe(subject);
   const startTime = Date.now();
   try {
@@ -179,7 +179,7 @@ const helpRemoveSub = nats.subscribe('help.remove', (subject, message) => {
 natsSubscriptions.push(helpRemoveSub);
 
 // Subscribe to help update requests
-const helpUpdateRequestSub = nats.subscribe('help.updateRequest', (subject) => {
+const helpUpdateRequestSub = nats.subscribe('help.updateRequest', (subject: string) => {
   metrics.recordNatsSubscribe(subject);
   try {
     log.info('Received help.updateRequest message', {
