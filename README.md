@@ -130,6 +130,7 @@ Standard IRC-style bot metadata response. Matches both `!bots` / `.bots` (raw, n
 | Subject | Direction | Purpose |
 |---------|-----------|---------|
 | `help.update` | Inbound | Modules publish their `HelpRegistration` payloads here |
+| `help.remove` | Inbound | Modules request removal of their help entries |
 | `help.updateRequest` | Outbound / Inbound | Help module requests all modules re-send their docs; modules may also request a full refresh |
 | `help.updateRequest.*` | Inbound | Module-specific update request (e.g., `help.updateRequest.tell`) |
 | `command.execute.{uuid}` | Inbound | Router dispatches matched `!help` / `!bots` commands here |
@@ -212,7 +213,7 @@ npm run dev
 
 ## Contributing
 
-This module is part of the [eevee](https://github.com/so-rich/eevee) project. See the contributing guidelines for details.
+This module is part of the [eevee](https://github.com/eeveebot/eevee) project. See the contributing guidelines for details.
 
 ## License
 
