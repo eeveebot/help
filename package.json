@@ -11,7 +11,9 @@
     "update-libraries": "ncu -u @eeveebot/libeevee undici && npm install"
   },
   "dependencies": {
-    "@eeveebot/libeevee": "^4.1.0"
+    "@eeveebot/libeevee": "^4.2.0",
+    "nats": "^2.29.3",
+    "prom-client": "^15.1.3"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
