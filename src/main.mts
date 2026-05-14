@@ -3,6 +3,7 @@
 // Help module
 // provides help information for commands across the system
 
+import * as Nats from 'nats';
 import {
   NatsClient,
   log,
@@ -19,7 +20,7 @@ import {
   registerStatsHandlers
 } from '@eeveebot/libeevee';
 import { HelpRegistry } from './lib/help-registry.mjs';
-import { HelpRegistration } from './types/help.mjs';
+import { HelpRegistration, HelpRemoval } from './types/help.mjs';
 
 // Import module-specific metrics
 import {
@@ -48,7 +49,7 @@ setupHttpServer({
   serviceName: 'help',
   natsClients: natsClients,
 });
-const natsSubscriptions: Array<Promise<string | boolean>> = [];
+const natsSubscriptions: Array<Promise<Nats.Subscription | false>> = [];
 
 // Initialize help registry
 let helpRegistry: HelpRegistry | null = null;
@@ -147,6 +148,35 @@ const helpUpdateSub = nats.subscribe('help.update', (subject, message) => {
   }
 });
 natsSubscriptions.push(helpUpdateSub);
+
+// Subscribe to help removal messages
+const helpRemoveSub = nats.subscribe('help.remove', (subject, message) => {
+  metrics.recordNatsSubscribe(subject);
+  const startTime = Date.now();
+  try {
+    const data = JSON.parse(message.string()) as HelpRemoval;
+    log.info('Received help.remove message', {
+      producer: 'help',
+      from: data.from,
+    });
+
+    if (helpRegistry) {
+      helpRegistry.unregisterHelp(data.from);
+      recordHelpRegistryOperation('unregister', 'success');
+    }
+  } catch (error) {
+    log.error('Failed to process help.remove message', {
+      producer: 'help',
+      error: error,
+    });
+    recordHelpRegistryOperation('unregister', 'error');
+    recordError('help_remove_process');
+  } finally {
+    const duration = Date.now() - startTime;
+    recordProcessingTime(duration / 1000);
+  }
+});
+natsSubscriptions.push(helpRemoveSub);
 
 // Subscribe to help update requests
 const helpUpdateRequestSub = nats.subscribe('help.updateRequest', (subject) => {

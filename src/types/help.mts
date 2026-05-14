@@ -19,3 +19,8 @@ export interface RegisteredHelp {
   from: string;
   help: HelpItem[];
 }
+
+export interface HelpRemoval {
+  type: 'help.remove';
+  from: string;
+}
