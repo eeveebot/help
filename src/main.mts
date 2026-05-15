@@ -3,6 +3,7 @@
 // Help module
 // provides help information for commands across the system
 
+import type { NatsCommandData } from './lib/types.mjs';
 import * as Nats from 'nats';
 import {
   NatsClient,
@@ -124,9 +125,8 @@ natsSubscriptions.push(...botsWithPrefixCmdSubs);
 const helpUpdateSub = nats.subscribe('help.update', (subject: string, message: Nats.Msg) => {
   metrics.recordNatsSubscribe(subject);
   const startTime = Date.now();
-      let data: any;
-      try {
-        data = JSON.parse(message.string()) as HelpRegistration;
+  try {
+    const data = JSON.parse(message.string()) as HelpRegistration;
     log.info('Received help.update message', {
       producer: 'help',
       from: data.from,
@@ -154,9 +154,8 @@ natsSubscriptions.push(helpUpdateSub);
 const helpRemoveSub = nats.subscribe('help.remove', (subject: string, message: Nats.Msg) => {
   metrics.recordNatsSubscribe(subject);
   const startTime = Date.now();
-      let data: any;
-      try {
-        data = JSON.parse(message.string()) as HelpRemoval;
+  try {
+    const data = JSON.parse(message.string()) as HelpRemoval;
     log.info('Received help.remove message', {
       producer: 'help',
       from: data.from,
@@ -234,7 +233,7 @@ const helpCommandSub = nats.subscribe(
   async (subject, message) => {
     metrics.recordNatsSubscribe(subject);
     const startTime = Date.now();
-      let data: any;
+      let data: NatsCommandData = {} as NatsCommandData;
       try {
         data = JSON.parse(message.string());
       log.info('Received command.execute for help', {
@@ -328,7 +327,7 @@ const botsCommandSub = nats.subscribe(
   async (subject, message) => {
     metrics.recordNatsSubscribe(subject);
     const startTime = Date.now();
-      let data: any;
+      let data: NatsCommandData = {} as NatsCommandData;
       try {
         data = JSON.parse(message.string());
       log.info('Received command.execute for bots', {
@@ -379,7 +378,7 @@ const botsWithPrefixCommandSub = nats.subscribe(
   async (subject, message) => {
     metrics.recordNatsSubscribe(subject);
     const startTime = Date.now();
-      let data: any;
+      let data: NatsCommandData = {} as NatsCommandData;
       try {
         data = JSON.parse(message.string());
       log.info('Received command.execute for bots with platform prefix', {
