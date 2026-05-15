@@ -124,8 +124,9 @@ natsSubscriptions.push(...botsWithPrefixCmdSubs);
 const helpUpdateSub = nats.subscribe('help.update', (subject: string, message: Nats.Msg) => {
   metrics.recordNatsSubscribe(subject);
   const startTime = Date.now();
-  try {
-    const data = JSON.parse(message.string()) as HelpRegistration;
+      let data: any;
+      try {
+        data = JSON.parse(message.string()) as HelpRegistration;
     log.info('Received help.update message', {
       producer: 'help',
       from: data.from,
@@ -153,8 +154,9 @@ natsSubscriptions.push(helpUpdateSub);
 const helpRemoveSub = nats.subscribe('help.remove', (subject: string, message: Nats.Msg) => {
   metrics.recordNatsSubscribe(subject);
   const startTime = Date.now();
-  try {
-    const data = JSON.parse(message.string()) as HelpRemoval;
+      let data: any;
+      try {
+        data = JSON.parse(message.string()) as HelpRemoval;
     log.info('Received help.remove message', {
       producer: 'help',
       from: data.from,
@@ -232,8 +234,9 @@ const helpCommandSub = nats.subscribe(
   async (subject, message) => {
     metrics.recordNatsSubscribe(subject);
     const startTime = Date.now();
-    try {
-      const data = JSON.parse(message.string());
+      let data: any;
+      try {
+        data = JSON.parse(message.string());
       log.info('Received command.execute for help', {
         producer: 'help',
         platform: data.platform,
@@ -325,8 +328,9 @@ const botsCommandSub = nats.subscribe(
   async (subject, message) => {
     metrics.recordNatsSubscribe(subject);
     const startTime = Date.now();
-    try {
-      const data = JSON.parse(message.string());
+      let data: any;
+      try {
+        data = JSON.parse(message.string());
       log.info('Received command.execute for bots', {
         producer: 'help',
         platform: data.platform,
@@ -375,8 +379,9 @@ const botsWithPrefixCommandSub = nats.subscribe(
   async (subject, message) => {
     metrics.recordNatsSubscribe(subject);
     const startTime = Date.now();
-    try {
-      const data = JSON.parse(message.string());
+      let data: any;
+      try {
+        data = JSON.parse(message.string());
       log.info('Received command.execute for bots with platform prefix', {
         producer: 'help',
         platform: data.platform,
