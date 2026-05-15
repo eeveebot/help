@@ -311,7 +311,7 @@ const helpCommandSub = nats.subscribe(
       // Record failed command execution
       if (typeof error === 'object' && error !== null && 'platform' in error && 'network' in error && 'channel' in error) {
         // If we have the data, record with specific details
-        recordHelpCommand(error.platform, error.network, error.channel, 'error');
+        recordHelpCommand((error as { platform: string; network: string; channel: string }).platform, (error as { platform: string; network: string; channel: string }).network, (error as { platform: string; network: string; channel: string }).channel, 'error');
       } else {
         // Otherwise record with unknown details
         recordHelpCommand('unknown', 'unknown', 'unknown', 'error');
@@ -367,7 +367,7 @@ const botsCommandSub = nats.subscribe(
       // Record failed command execution
       if (typeof error === 'object' && error !== null && 'platform' in error && 'network' in error && 'channel' in error) {
         // If we have the data, record with specific details
-        recordBotsCommand(error.platform, error.network, error.channel, 'error');
+        recordBotsCommand((error as { platform: string; network: string; channel: string }).platform, (error as { platform: string; network: string; channel: string }).network, (error as { platform: string; network: string; channel: string }).channel, 'error');
       } else {
         // Otherwise record with unknown details
         recordBotsCommand('unknown', 'unknown', 'unknown', 'error');
@@ -423,7 +423,7 @@ const botsWithPrefixCommandSub = nats.subscribe(
       // Record failed command execution
       if (typeof error === 'object' && error !== null && 'platform' in error && 'network' in error && 'channel' in error) {
         // If we have the data, record with specific details
-        recordBotsCommand(error.platform, error.network, error.channel, 'error');
+        recordBotsCommand((error as { platform: string; network: string; channel: string }).platform, (error as { platform: string; network: string; channel: string }).network, (error as { platform: string; network: string; channel: string }).channel, 'error');
       } else {
         // Otherwise record with unknown details
         recordBotsCommand('unknown', 'unknown', 'unknown', 'error');
