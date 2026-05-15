@@ -309,13 +309,7 @@ const helpCommandSub = nats.subscribe(
       });
       
       // Record failed command execution
-      if (typeof error === 'object' && error !== null && 'platform' in error && 'network' in error && 'channel' in error) {
-        // If we have the data, record with specific details
-        recordHelpCommand((error as { platform: string; network: string; channel: string }).platform, (error as { platform: string; network: string; channel: string }).network, (error as { platform: string; network: string; channel: string }).channel, 'error');
-      } else {
-        // Otherwise record with unknown details
-        recordHelpCommand('unknown', 'unknown', 'unknown', 'error');
-      }
+      recordHelpCommand(data.platform, data.network, data.channel, 'error');
       recordError('help_command_process');
     } finally {
       const duration = Date.now() - startTime;
@@ -365,13 +359,7 @@ const botsCommandSub = nats.subscribe(
       });
       
       // Record failed command execution
-      if (typeof error === 'object' && error !== null && 'platform' in error && 'network' in error && 'channel' in error) {
-        // If we have the data, record with specific details
-        recordBotsCommand((error as { platform: string; network: string; channel: string }).platform, (error as { platform: string; network: string; channel: string }).network, (error as { platform: string; network: string; channel: string }).channel, 'error');
-      } else {
-        // Otherwise record with unknown details
-        recordBotsCommand('unknown', 'unknown', 'unknown', 'error');
-      }
+      recordBotsCommand(data.platform, data.network, data.channel, 'error');
       recordError('bots_command_process');
     } finally {
       const duration = Date.now() - startTime;
@@ -421,13 +409,7 @@ const botsWithPrefixCommandSub = nats.subscribe(
       });
       
       // Record failed command execution
-      if (typeof error === 'object' && error !== null && 'platform' in error && 'network' in error && 'channel' in error) {
-        // If we have the data, record with specific details
-        recordBotsCommand((error as { platform: string; network: string; channel: string }).platform, (error as { platform: string; network: string; channel: string }).network, (error as { platform: string; network: string; channel: string }).channel, 'error');
-      } else {
-        // Otherwise record with unknown details
-        recordBotsCommand('unknown', 'unknown', 'unknown', 'error');
-      }
+      recordBotsCommand(data.platform, data.network, data.channel, 'error');
       recordError('bots_with_prefix_command_process');
     } finally {
       const duration = Date.now() - startTime;
