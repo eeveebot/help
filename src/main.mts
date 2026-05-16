@@ -5,6 +5,8 @@
 
 import type { NatsCommandData } from './lib/types.mjs';
 import * as Nats from 'nats';
+import fs from 'node:fs';
+
 import {
   NatsClient,
   log,
@@ -36,6 +38,7 @@ const metrics = createModuleMetrics('help');
 
 // Record module startup time for uptime tracking
 const moduleStartTime = Date.now();
+const moduleVersion = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version as string;
 
 // Initialize system metrics
 initializeSystemMetrics('help');
@@ -426,7 +429,7 @@ natsSubscriptions.push(botsWithPrefixCommandSub);
 // control.registerCommands subscriptions are now handled by registerCommand() autoControlSub
 
 // Subscribe to stats.uptime and stats.emit.request
-const statsSubs = registerStatsHandlers({ nats, moduleName: 'help', startTime: moduleStartTime, metrics });
+const statsSubs = registerStatsHandlers({ nats, moduleName: 'help', startTime: moduleStartTime, version: moduleVersion, metrics });
 natsSubscriptions.push(...statsSubs);
 
 // Request help updates from all modules at startup
